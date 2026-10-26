@@ -78,9 +78,4 @@ Dans n8n :
 2. Recréer les *credentials* Qdrant et Ollama.
 3. Dans l'assistant, resélectionner le sous-workflow `verify-cfs` (nœud `CFS Verification`).
 
-Les exports publiés ici ne contiennent ni adresse interne ni mot de passe : ces valeurs sont réinjectées à partir de `.env`.
 
-## Auteur
-
-**Hosni Ben Douma** : conception et développement de l'ensemble des workflows et de l'API de l'ontologie.
-[GitHub](https://github.com/bendoumahosni) · [LinkedIn](https://www.linkedin.com/in/hosni-ben-douma)
