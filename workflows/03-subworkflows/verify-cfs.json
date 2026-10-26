@@ -1,0 +1,124 @@
+{
+  "name": "verify-cfs_v4 (SPARQL pré-construit)",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "candidateId"
+            },
+            {
+              "name": "requirements"
+            },
+            {
+              "name": "ref"
+            },
+            {
+              "name": "sparql"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -224,
+        32
+      ],
+      "id": "65d96af3-308b-4617-a606-aa5818d36d3b",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ontology-api.example:8000/query",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"repository\": \"nfmust_catalog\",\n  \"query\": {{ JSON.stringify($json.sparql) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        288,
+        0
+      ],
+      "id": "084440e8-2ba9-4430-bb12-10d27431ed4d",
+      "name": "HTTP Request",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// verify-cfs — node \"Formatage résultats\"  (Code — Run Once for All Items)   v3\n//\n// Correctif v3 : le verdict ne se calculait que sur les checks `blocking:true`.\n// Un KPI non documenté (MISSING) ou un écart non bloquant disparaissait donc du\n// verdict, qui affichait PASS alors que le détail montrait un ⚠️ ou un ❌.\n//\n// Règle appliquée maintenant :\n//   FAIL            : au moins un check BLOQUANT en FAIL\n//   PASS_WITH_GAPS  : sinon, au moins un FAIL non bloquant, ou un MISSING/UNPARSABLE\n//   PASS            : tous les checks en PASS\n// =============================================================================\n\nconst GEN = 'Generation_SPARQL';\n\nfunction extractRows(resp) {\n  if (!resp) return [];\n  if (Array.isArray(resp)) return resp;\n  if (Array.isArray(resp.results)) return resp.results;\n  if (resp.results && Array.isArray(resp.results.bindings)) return resp.results.bindings;\n  if (Array.isArray(resp.bindings)) return resp.bindings;\n  if (Array.isArray(resp.data)) return resp.data;\n  if (resp.data && Array.isArray(resp.data.results)) return resp.data.results;\n  return [];\n}\nconst val = x => (x && typeof x === 'object' && 'value' in x) ? x.value : x;\nconst short = uri => String(uri ?? '').split(/[\\/#]/).pop();\n\n// v4 : statuts supplémentaires produits par une requête fournie par l'appelant\n//      (conversion d'unité à partir de tmf:unitOfMeasure)\nconst GAP_STATUSES = ['MISSING', 'UNPARSABLE', 'MISSING_UNIT', 'UNKNOWN_UNIT'];\nconst ICON = { PASS: '✅', FAIL: '❌', MISSING: '⚠️', UNPARSABLE: '⚠️', MISSING_UNIT: '⚠️', UNKNOWN_UNIT: '⚠️' };\nconst TXT  = { PASS: 'conforme', FAIL: 'non conforme', MISSING: 'non documenté dans l’ontologie',\n               UNPARSABLE: 'valeur illisible dans l’ontologie',\n               MISSING_UNIT: 'unité absente dans l’ontologie (comparaison impossible)',\n               UNKNOWN_UNIT: 'unité inconnue du convertisseur (comparaison impossible)' };\n\nconst genItems = $(GEN).all().map(i => i.json);\nconst inItems  = $input.all();\nconst out = [];\n\nfor (let k = 0; k < inItems.length; k++) {\n  const resp = inItems[k].json || {};\n  const gen = genItems.find(g => g.ref && resp.ref && String(g.ref) === String(resp.ref))\n           || genItems[k] || {};\n  const reqs = Array.isArray(gen.requirements) ? gen.requirements : [];\n  const ref  = gen.ref ?? resp.ref ?? null;\n\n  if (gen.skip || resp.skip) {\n    out.push({ json: { ref, candidateId: gen.candidateId ?? null, verdict: 'SKIPPED',\n      skip_reason: gen.skip_reason ?? 'skip', error: gen.error ?? null, checks: [], satisfied: [],\n      unsatisfied: [], soft_unsatisfied: [], undocumented: [],\n      message: 'Vérification ontologique non effectuée (' + (gen.skip_reason || 'skip') + ').' } });\n    continue;\n  }\n\n  const rows = extractRows(resp);\n  if (!rows.length) {\n    out.push({ json: { ref, candidateId: gen.candidateId ?? null, verdict: 'ERROR',\n      error: 'AUCUNE_LIGNE_RETOURNEE', checks: [], satisfied: [], unsatisfied: [],\n      soft_unsatisfied: [], undocumented: [], raw_response_keys: Object.keys(resp),\n      message: 'Impossible de vérifier : l’ontologie n’a retourné aucune ligne pour ce CFS. Vérifiez l’identifiant du candidat.' } });\n    continue;\n  }\n\n  const perCandidate = rows.map(row => {\n    const checks = reqs.map((r, i) => {\n      const status = val(row['status' + i]) ?? 'MISSING';\n      return {\n        kpi: r.kpi,\n        label: r.label || r.kpi,\n        op: r.op,\n        expected: r.value,\n        unit: r.unit || '',\n        actual: val(row['value' + i]) ?? null,\n        status,\n        blocking: r.blocking !== false,\n        source_key: r.source_key ?? null,\n        source_value: r.source_value ?? null,\n      };\n    });\n    // --- verdict : TOUS les checks comptent, le caractère bloquant ne change que la gravité ---\n    const hardFail = checks.some(c => c.blocking && c.status === 'FAIL');\n    const softFail = checks.some(c => !c.blocking && c.status === 'FAIL');\n    const gaps     = checks.some(c => GAP_STATUSES.includes(c.status));\n    const verdict  = hardFail ? 'FAIL' : (softFail || gaps) ? 'PASS_WITH_GAPS' : 'PASS';\n    const score    = checks.filter(c => c.status === 'PASS').length;\n    const gapCount = checks.filter(c => c.status !== 'PASS').length;\n    return { candidate: val(row.candidate), checks, verdict, score, gapCount };\n  });\n\n  const ORDRE = { PASS: 0, PASS_WITH_GAPS: 1, FAIL: 2 };\n  perCandidate.sort((a, b) => (ORDRE[a.verdict] - ORDRE[b.verdict])\n    || (b.score - a.score) || (a.gapCount - b.gapCount));\n  const best = perCandidate[0];\n\n  const satisfied       = best.checks.filter(c => c.status === 'PASS').map(c => c.label);\n  const unsatisfied     = best.checks.filter(c => c.status === 'FAIL' && c.blocking).map(c => c.label);\n  const softUnsatisfied = best.checks.filter(c => c.status === 'FAIL' && !c.blocking).map(c => c.label);\n  const undocumented    = best.checks.filter(c => GAP_STATUSES.includes(c.status))\n    .map(c => c.label + (c.status === 'MISSING' ? '' : ` [${c.status}]`));\n\n  const ligne = c => `  • ${c.label} : exigé ${c.op} ${c.expected}${c.unit ? ' ' + c.unit : ''}`\n    + ` / offert ${c.actual ?? '—'} → ${ICON[c.status] || ''} ${TXT[c.status] || c.status}`\n    + (c.status === 'FAIL' && !c.blocking ? ' (non bloquant)' : '');\n\n  const detail = best.checks.map(ligne).join('\\n');\n  let message;\n  if (best.verdict === 'PASS') {\n    message = '✅ Le CFS proposé satisfait toutes vos exigences vérifiées :\\n' + detail;\n  } else if (best.verdict === 'PASS_WITH_GAPS') {\n    const reste = [];\n    if (softUnsatisfied.length) reste.push('écart non bloquant sur ' + softUnsatisfied.join(', '));\n    if (undocumented.length)    reste.push('non documenté au catalogue : ' + undocumented.join(', '));\n    message = '🟠 Le CFS proposé ne contredit aucune exigence bloquante, mais tout n’est pas garanti :\\n'\n      + detail + '\\n\\nÀ confirmer auprès de l’opérateur — ' + reste.join(' ; ') + '.';\n  } else {\n    message = '❌ Le CFS proposé ne satisfait pas toutes vos exigences.\\n\\nDétail :\\n' + detail\n      + '\\n\\nExigences non satisfaites : ' + unsatisfied.join(', ') + '.';\n  }\n\n  out.push({ json: {\n    ref, candidateId: short(best.candidate) || gen.candidateId || null,\n    verdict: best.verdict, checks: best.checks,\n    satisfied, unsatisfied, soft_unsatisfied: softUnsatisfied, undocumented, message,\n    ranking: perCandidate.map(c => ({ candidate: short(c.candidate), verdict: c.verdict, score: c.score })),\n  } });\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        0
+      ],
+      "id": "87278ef2-ce0f-41e8-927a-acf14abdd410",
+      "name": "Formatage résultats"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// verify-cfs v2 — node \"Generation_SPARQL\"  (Code — Run Once for All Items)\n//\n// Changements vs v1 :\n//  1. traite TOUS les items (v1 ne traitait que $json = le 1er item) -> vérification\n//     de plusieurs capacités / plusieurs candidats en un seul appel ;\n//  2. candidateId peut être une chaîne OU un tableau -> VALUES ?candidate (classement top-K) ;\n//  3. sous-SELECT + SAMPLE par KPI : plus de produit cartésien si un CFS porte\n//     plusieurs valeurs pour une même caractéristique ;\n//  4. cast numérique robuste (virgule décimale, unité collée : \"10 ms\", \"99,999 %\") ;\n//  5. nouvel opérateur \"contains\" pour les chaînes (areaOfService = \"Toulouse, Blagnac\") ;\n//  6. ne lève plus d'exception : renvoie skip=true / error -> le pipeline parent\n//     ne casse jamais sur une vérification impossible ;\n//  7. ?overall n'est plus calculé en SPARQL (une erreur d'évaluation y rendait la\n//     variable non liée) : le verdict est calculé en JS dans le node de formatage.\n//\n// Entrées attendues par item : candidateId (string|array), requirements (array|string JSON), ref\n// Sortie : { ref, candidateId, candidates[], requirements[], sparql, skip, error }\n// =============================================================================\n\n// ─────────────────────────────────────────────────────────────────────────────\n// v4 : PASSE-PLAT. Si le workflow appelant fournit déjà `sparql`, on l'utilise\n// tel quel : c'est lui qui connaît les noms exacts des caractéristiques, les\n// unités (tmf:unitOfMeasure) et les codes de zone du catalogue.\n// Sans `sparql`, le comportement de v3 s'applique intégralement (REGISTRY).\n// ─────────────────────────────────────────────────────────────────────────────\nconst PREBUILT = (() => {\n  const out = [];\n  for (const item of $input.all()) {\n    const j = item.json || {};\n    const pre = String(j.sparql ?? '').trim();\n    if (!pre) { out.push(null); continue; }\n    const cand = String(j.candidateId ?? '').trim();\n    out.push({ json: {\n      ref: j.ref ?? j.functionality_id ?? null,\n      skip: false, skip_reason: null, error: null,\n      candidateId: cand || null,\n      candidates: cand ? [cand] : [],\n      requirements: (() => { let v = j.requirements;\n        for (let i = 0; i < 3 && typeof v === 'string'; i++) { try { v = JSON.parse(v); } catch (_) { break; } }\n        return Array.isArray(v) ? v : []; })(),\n      sparql: pre,\n      sparql_source: 'caller',\n    } });\n  }\n  return out;\n})();\n\nconst REGISTRY = {\n  'latency': {kind:'number'}, 'reliability': {kind:'number'}, 'availability': {kind:'number'},\n  'Maximum number of UEs': {kind:'number'}, 'UE density': {kind:'number'},\n  'downlinkThroughputPerUE': {kind:'number'}, 'Downlink Throughput': {kind:'number'},\n  'Uplink Throughput': {kind:'number'},\n  'isolationLevel': {kind:'string'}, 'uEMobilityLevel': {kind:'string'}, 'areaOfService': {kind:'string'},\n};\nconst NUMERIC_OPS = new Set(['=','!=','<','<=','>','>=']);\nconst STRING_OPS  = new Set(['=','!=','contains']);\nconst BASE = 'http://vocab.nfmust.ie/tmf-service-core/concret_cfs/';\nconst PREFIXES =\n  'PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\\n' +\n  'PREFIX tmf: <http://vocab.nfmust.ie/tmf-service-core#>';\n\nconst esc = s => String(s).replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"');\n\nfunction parseLlmJson(raw) {\n  if (raw && typeof raw === 'object') return raw;\n  let s = String(raw).trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  if (s[0] !== '{' && s[0] !== '[') { const m = s.match(/[\\{\\[][\\s\\S]*[\\}\\]]/); if (m) s = m[0]; }\n  return JSON.parse(s);\n}\nfunction normalizeRequirements(value) {\n  let v = value;\n  for (let i = 0; i < 3 && typeof v === 'string'; i++) { try { v = parseLlmJson(v); } catch (_) { break; } }\n  if (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.requirements)) v = v.requirements;\n  return Array.isArray(v) ? v : [];\n}\nconst toUri = id => (/^https?:\\/\\//.test(id) ? id : BASE + id);\n\n// Extraction numérique tolérante côté SPARQL :\n//   \"99,999 %\" -> \"99.999\" ; \"10 ms\" -> \"10\" ; \"50 Mbit/s\" -> \"50\"\nfunction numExpr(varName) {\n  // xsd:double et non xsd:decimal : decimal rejette la notation scientifique (\"1.0E-6\")\n  return `xsd:double(REPLACE(REPLACE(REPLACE(STR(?${varName}), \",\", \".\"), \"[^0-9.eE+-]\", \"\"), \"^([+-]?[0-9]*\\\\\\\\.?[0-9]+([eE][+-]?[0-9]+)?).*$\", \"$1\"))`;\n}\n\nfunction buildQuery(candidates, requirements) {\n  const valuesLine = '  VALUES ?candidate { ' + candidates.map(c => `<${toUri(c)}>`).join(' ') + ' }';\n  const projected  = ['?candidate'];\n  const body       = [valuesLine];\n\n  requirements.forEach((r, i) => {\n    const meta = REGISTRY[r.kpi];\n    if (!meta) throw new Error(`KPI inconnu \"${r.kpi}\".`);\n    const raw = `raw${i}`, num = `num${i}`;\n    const nameV = `name${i}`, valV = `value${i}`, stV = `status${i}`;\n    projected.push(`?${nameV} ?${valV} ?${stV}`);\n\n    let test, numBind = '';\n    if (meta.kind === 'number') {\n      if (!NUMERIC_OPS.has(r.op)) throw new Error(`Opérateur \"${r.op}\" invalide pour le KPI numérique \"${r.kpi}\".`);\n      const n = Number(r.value);\n      if (!Number.isFinite(n)) throw new Error(`Valeur \"${r.value}\" non numérique pour \"${r.kpi}\".`);\n      numBind = `  BIND(${numExpr(raw)} AS ?${num})`;\n      test = `IF(!BOUND(?${num}), \"UNPARSABLE\", IF(?${num} ${r.op} ${n}, \"PASS\", \"FAIL\"))`;\n    } else {\n      if (!STRING_OPS.has(r.op)) throw new Error(`Opérateur \"${r.op}\" invalide pour le KPI textuel \"${r.kpi}\" (=, != ou contains).`);\n      const lit = esc(String(r.value));\n      const cmp = r.op === 'contains'\n        ? `CONTAINS(LCASE(STR(?${raw})), LCASE(\"${lit}\"))`\n        : `LCASE(STR(?${raw})) ${r.op} LCASE(\"${lit}\")`;\n      test = `IF(${cmp}, \"PASS\", \"FAIL\")`;\n    }\n\n    body.push(\n      `  OPTIONAL {`,\n      `    SELECT ?candidate (SAMPLE(?v${i}) AS ?${raw}) WHERE {`,\n      valuesLine.replace(/^ {2}/, '      '),\n      `      ?candidate tmf:hasCharacteristic ?c${i} .`,\n      `      ?c${i} tmf:name ?n${i} . FILTER(LCASE(STR(?n${i})) = LCASE(\"${esc(r.kpi)}\"))`,\n      `      ?c${i} tmf:hasCharacteristicValue ?cv${i} .`,\n      `      ?cv${i} tmf:value ?v${i} .`,\n      `    } GROUP BY ?candidate`,\n      `  }`,\n    );\n    if (numBind) body.push(numBind);\n    body.push(\n      `  BIND(\"${esc(r.kpi)}\" AS ?${nameV})`,\n      `  BIND(?${raw} AS ?${valV})`,\n      `  BIND(IF(!BOUND(?${raw}), \"MISSING\", ${test}) AS ?${stV})`,\n    );\n  });\n\n  return `${PREFIXES}\\nSELECT ${projected.join(' ')}\\nWHERE {\\n${body.join('\\n')}\\n}`;\n}\n\n// ── Traitement de TOUS les items ─────────────────────────────────────────────\n// NB : les items \"skip\" reçoivent une requête no-op au lieu de null. Raison :\n// router les skips autour du node HTTP via un IF ferait exécuter le node de\n// formatage DEUX fois (une par branche entrante) et casserait l'appariement\n// 1 item d'entrée -> 1 item de sortie. Une requête triviale coûte moins cher\n// qu'un branchement qui casse le contrat.\nconst NOOP_SPARQL = 'SELECT ?skip WHERE { BIND(\"skip\" AS ?skip) }';\nconst out = [];\nconst ALL = $input.all();\nfor (let k = 0; k < ALL.length; k++) {\n  const item = ALL[k];\n  if (PREBUILT[k]) { out.push(PREBUILT[k]); continue; }   // v4 : requête fournie par l'appelant\n  const input = item.json || {};\n  const ref = input.ref ?? input.functionality_id ?? null;\n\n  const rawId = input.candidateId ?? input.candidates ?? input.spec_id ?? null;\n  const candidates = (Array.isArray(rawId) ? rawId : [rawId])\n    .filter(x => x !== null && x !== undefined && String(x).trim() !== '')\n    .map(String);\n  const requirements = normalizeRequirements(input.requirements);\n\n  if (!candidates.length) {\n    out.push({ json: { ref, skip: true, skip_reason: 'no_candidate', candidateId: null,\n                       candidates: [], requirements, sparql: NOOP_SPARQL } });\n    continue;\n  }\n  if (!requirements.length) {\n    out.push({ json: { ref, skip: true, skip_reason: 'no_requirements', candidateId: candidates[0],\n                       candidates, requirements: [], sparql: NOOP_SPARQL } });\n    continue;\n  }\n  try {\n    out.push({ json: { ref, skip: false, candidateId: candidates[0], candidates, requirements,\n                       sparql: buildQuery(candidates, requirements) } });\n  } catch (e) {\n    out.push({ json: { ref, skip: true, skip_reason: 'build_error', error: String(e.message || e),\n                       candidateId: candidates[0], candidates, requirements, sparql: NOOP_SPARQL } });\n  }\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0ca7468d-f9ef-446a-a040-b5fb42f762c5",
+      "name": "Generation_SPARQL"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Generation_SPARQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Formatage résultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generation_SPARQL": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "40b95f0f-54b5-4c95-9843-7eb81cd5d515",
+  "meta": {},
+  "nodeGroups": [],
+  "id": "S60SbYcLGdQdIKOQ",
+  "tags": []
+}

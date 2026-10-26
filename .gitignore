@@ -1,0 +1,7 @@
+# Secrets et workflows configurés (contiennent des identifiants)
+.env
+build/
+
+# Divers
+__pycache__/
+.DS_Store

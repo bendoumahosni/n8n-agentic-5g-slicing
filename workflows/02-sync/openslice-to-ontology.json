@@ -1,0 +1,367 @@
+{
+  "name": "OpenSlice-to_Ontology_Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://openslice.example/auth/realms/openslice/protocol/openid-connect/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "password"
+            },
+            {
+              "name": "client_id",
+              "value": "osapiWebClientId"
+            },
+            {
+              "name": "username",
+              "value": "__OPENSLICE_USERNAME__"
+            },
+            {
+              "name": "password",
+              "value": "__OPENSLICE_PASSWORD__"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2576,
+        256
+      ],
+      "id": "3f13632b-aaf8-460b-a8e2-825053268c65",
+      "name": "getTokenOpneSlice1"
+    },
+    {
+      "parameters": {
+        "url": "http://openslice.example/tmf-api/serviceCatalogManagement/v4/serviceSpecification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2304,
+        272
+      ],
+      "id": "3dd72120-0270-403e-a484-9aa59c3de601",
+      "name": "getServicesCatalogueOpenSlice1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean : aplatit la liste OpenSlice et sort un item par service avec juste l'id\nconst input = $input.all();\nconst specs = [];\nfor (const it of input) {\n  const j = it.json;\n  if (Array.isArray(j)) specs.push(...j);\n  else if (j && Array.isArray(j.data)) specs.push(...j.data);\n  else if (j) specs.push(j);\n}\n\nconst kindOf = (s) => {\n  const t = (s['@type'] || '').toLowerCase();\n  if (t.includes('customerfacing')) return 'CFS';\n  if (t.includes('resourcefacing')) return 'RFS';\n  if (s.resourceSpecification && s.resourceSpecification.length) return 'RFS';\n  const n = (s.name || '').toLowerCase();\n  return (n.startsWith('rfs') || n.includes('@osm')) ? 'RFS' : 'CFS';\n};\n\nreturn specs\n  .filter(s => s && s.id)\n  .map((s, i) => ({\n    json: { id: s.id, name: s.name, kind: kindOf(s) },\n    pairedItem: { item: i },\n  }));"
+      },
+      "name": "Clean Service Specs (CFS+RFS)1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2080,
+        192
+      ],
+      "id": "ae5a52e8-f5a8-4e54-86e8-ed7e7ca15c66"
+    },
+    {
+      "parameters": {
+        "formTitle": "Sychronisation catalog open slice catalog RDF",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        -2960,
+        304
+      ],
+      "id": "59ba9fb4-c438-4c00-bb53-2c98004050ca",
+      "name": "On form submission",
+      "webhookId": "ef1dffc8-8608-45d5-bcf3-58b00cc153c1"
+    },
+    {
+      "parameters": {
+        "url": "=http://openslice.example:13082/tmf-api/serviceCatalogManagement/v4/serviceSpecification/{{$json.id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('getTokenOpneSlice1').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1840,
+        320
+      ],
+      "id": "7266ff86-7c32-47f4-a932-9f6a93abc7d3",
+      "name": " Get Full Spec"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nettoie le spec OpenSlice pour le rendre conforme au contrat de l'API,\n// et fixe @type pour le routage / l'auto-détection.\n// Mode : Run Once for All Items\n\nconst CFS = 'CustomerFacingServiceSpecification';\nconst RFS = 'ResourceFacingServiceSpecification';\n\n// Supprime récursivement les clés 'uuid' et toutes les valeurs null/undefined\nfunction clean(value) {\n  if (Array.isArray(value)) return value.map(clean);\n  if (value && typeof value === 'object') {\n    const out = {};\n    for (const [k, v] of Object.entries(value)) {\n      if (k === 'uuid') continue;                  // champ OpenSlice interdit\n      if (v === null || v === undefined) continue; // null rejeté par le contrat\n      out[k] = clean(v);\n    }\n    return out;\n  }\n  return value;\n}\n\nconst isRFS = (s) => {\n  const t = (s['@type'] || '').toLowerCase();\n  if (t.includes('resourcefacing')) return true;\n  if (t.includes('customerfacing')) return false;\n  const n = (s.name || '').toLowerCase();\n  if (n.startsWith('rfs') || n.includes('_rfs') || n.includes('@osm')) return true;\n  const cats = (s.category || []).map(c => (c.name || '').toLowerCase()).join(' ');\n  if (cats.includes('resource')) return true;\n  if (cats.includes('customer')) return false;\n  const hasRes = Array.isArray(s.resourceSpecification) && s.resourceSpecification.length > 0;\n  const hasRel = Array.isArray(s.serviceSpecRelationship) && s.serviceSpecRelationship.length > 0;\n  return hasRes && !hasRel;\n};\n\nreturn $input.all().map((it, i) => {\n  const spec = clean(it.json);\n  spec['@type'] = isRFS(spec) ? RFS : CFS;\n  if (typeof spec.href !== 'string') spec.href = '';   // évite href:null\n  return { json: spec, pairedItem: { item: i } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1600,
+        -16
+      ],
+      "id": "c96ba661-b315-42c5-af7d-b4a577be5f49",
+      "name": "Set @type"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json[\"@type\"] }}",
+                    "rightValue": "CustomerFacingServiceSpecification",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "90947d42-0ed2-43b7-8e5e-0b52ac5cfe9d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CFS"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "e9c1a75d-638d-4214-8ef5-0c2924c928d5",
+                    "leftValue": "={{ $json[\"@type\"] }}",
+                    "rightValue": "ResourceFacingServiceSpecification",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "RFS"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -1408,
+        176
+      ],
+      "id": "fb13628b-df23-490e-b360-e67a8c085ea7",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ontology-api.example:8000/concret-cfs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1152,
+        -64
+      ],
+      "id": "737a3104-08cb-4735-a6a5-097ffdcb2bd5",
+      "name": "CFS",
+      "notesInFlow": true,
+      "notes": "Création uniquement (POST). Les réponses HTTP sont vérifiées dans le nœud suivant : 409 entity_already_exists = CFS ignoré. Aucun PUT/PATCH."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ontology-api.example:8000/concret-rfs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -960,
+        304
+      ],
+      "id": "9a16451e-14c6-48da-885a-0c8e40bb1b54",
+      "name": "RFS"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toutes les requêtes CFS ont été effectuées avant cette vérification.\n// Seul le conflit entity_already_exists est ignoré ; les autres erreurs restent visibles.\nconst results = [];\nconst errors = [];\nfor (const [i, item] of $input.all().entries()) {\n  const statusCode = Number(item.json.statusCode);\n  let body = item.json.body ?? item.json.data ?? null;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch { /* Préserver les réponses texte. */ }\n  }\n  const detail = body && typeof body === 'object' ? (body.detail ?? body) : body;\n  const duplicate = statusCode === 409 &&\n    detail && typeof detail === 'object' && detail.error_code === 'entity_already_exists';\n  const success = statusCode >= 200 && statusCode < 300;\n  if (!success && !duplicate) {\n    const message = typeof detail === 'string' ? detail : JSON.stringify(detail);\n    errors.push(`CFS item ${i + 1} : HTTP ${statusCode || 'inconnu'} — ${message}`);\n  }\n  results.push({\n    json: {\n      status: duplicate ? 'ignored_existing' : success ? 'created' : 'error',\n      statusCode,\n      response: body,\n    },\n    pairedItem: { item: i },\n  });\n}\nif (errors.length) {\n  const created = results.filter(r => r.json.status === 'created').length;\n  const ignored = results.filter(r => r.json.status === 'ignored_existing').length;\n  throw new Error(`CFS : ${created} ajouté(s), ${ignored} existant(s) ignoré(s), ${errors.length} erreur(s).\\n${errors.join('\\n')}`);\n}\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        -64
+      ],
+      "id": "8faf3e53-895e-49f8-a187-a5c8c0e15078",
+      "name": "Verifier resultats CFS",
+      "notesInFlow": true,
+      "notes": "2xx : créé. 409 entity_already_exists : ignoré. Autres réponses : erreur explicite après traitement du lot CFS."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "getTokenOpneSlice1": {
+      "main": [
+        [
+          {
+            "node": "getServicesCatalogueOpenSlice1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getServicesCatalogueOpenSlice1": {
+      "main": [
+        [
+          {
+            "node": "Clean Service Specs (CFS+RFS)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "getTokenOpneSlice1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Service Specs (CFS+RFS)1": {
+      "main": [
+        [
+          {
+            "node": " Get Full Spec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    " Get Full Spec": {
+      "main": [
+        [
+          {
+            "node": "Set @type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set @type": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "CFS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RFS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CFS": {
+      "main": [
+        [
+          {
+            "node": "Verifier resultats CFS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "37c5b400-2902-46ed-8ecf-a0f1ac305053",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "QU5fmT79bw4pSU2Y",
+  "tags": []
+}

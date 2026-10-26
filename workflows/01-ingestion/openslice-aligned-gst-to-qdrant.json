@@ -1,0 +1,556 @@
+{
+  "name": "OpenSlice-to-Aligned-GST-Qdrant",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "Aligned_GST_Service_Catalog",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        3472,
+        592
+      ],
+      "id": "71b7bd59-ce24-4e3d-9233-18d1b936ad60",
+      "name": "RAG Catalog (ingestion)",
+      "credentials": {
+        "qdrantApi": {
+          "id": "qkOE9OWymfDMh1eN",
+          "name": "Qdrant account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "spec_id",
+                "value": "={{ $json.spec_id }}"
+              },
+              {
+                "name": "name",
+                "value": "={{ $json.name }}"
+              },
+              {
+                "name": "kind",
+                "value": "={{ $json.kind }}"
+              },
+              {
+                "name": "tier",
+                "value": "={{ $json.tier }}"
+              },
+              {
+                "name": "lastUpdate",
+                "value": "={{ $json.lastUpdate }}"
+              },
+              {
+                "name": "isBundle",
+                "value": "={{ $json.isBundle }}"
+              },
+              {
+                "name": "Availability",
+                "value": "={{ $json.meta['Availability'] }}"
+              },
+              {
+                "name": "Isolation level: Isolation",
+                "value": "={{ $json.meta['Isolation level: Isolation'] }}"
+              },
+              {
+                "name": "Isolation level: Logical Isolation",
+                "value": "={{ $json.meta['Isolation level: Logical Isolation'] }}"
+              },
+              {
+                "name": "Isolation level: Physical Isolation",
+                "value": "={{ $json.meta['Isolation level: Physical Isolation'] }}"
+              },
+              {
+                "name": "Area of Service",
+                "value": "={{ $json.meta['Area of Service'] }}"
+              },
+              {
+                "name": "Area of Service: Region specification",
+                "value": "={{ $json.meta['Area of Service: Region specification'] }}"
+              },
+              {
+                "name": "Downlink throughput per network slice: Guaranteed downlink throughput quota",
+                "value": "={{ $json.meta['Downlink throughput per network slice: Guaranteed downlink throughput quota'] }}"
+              },
+              {
+                "name": "Uplink throughput per network slice: Guaranteed uplink throughput quota",
+                "value": "={{ $json.meta['Uplink throughput per network slice: Guaranteed uplink throughput quota'] }}"
+              },
+              {
+                "name": "Downlink maximum throughput per UE: Maximum downlink throughput per UE value",
+                "value": "={{ $json.meta['Downlink maximum throughput per UE: Maximum downlink throughput per UE value'] }}"
+              },
+              {
+                "name": "Uplink maximum throughput per UE: Maximum Uplink Throughput per UE value",
+                "value": "={{ $json.meta['Uplink maximum throughput per UE: Maximum Uplink Throughput per UE value'] }}"
+              },
+              {
+                "name": "UE density",
+                "value": "={{ $json.meta['UE density'] }}"
+              },
+              {
+                "name": "Maximum number of UEs",
+                "value": "={{ $json.meta['Maximum number of UEs'] }}"
+              },
+              {
+                "name": "NB-IoT Support",
+                "value": "={{ $json.meta['NB-IoT Support'] }}"
+              },
+              {
+                "name": "Delay tolerance",
+                "value": "={{ $json.meta['Delay tolerance'] }}"
+              },
+              {
+                "name": "Slice quality of service: 3GPP 5QI",
+                "value": "={{ $json.meta['Slice quality of service: 3GPP 5QI'] }}"
+              },
+              {
+                "name": "Slice quality of service: Packet Delay Budget",
+                "value": "={{ $json.meta['Slice quality of service: Packet Delay Budget'] }}"
+              },
+              {
+                "name": "Slice quality of service: Packet Error Rate",
+                "value": "={{ $json.meta['Slice quality of service: Packet Error Rate'] }}"
+              },
+              {
+                "name": "Deterministic communication: Availability",
+                "value": "={{ $json.meta['Deterministic communication: Availability'] }}"
+              },
+              {
+                "name": "Deterministic communication: Periodicity",
+                "value": "={{ $json.meta['Deterministic communication: Periodicity'] }}"
+              },
+              {
+                "name": "Latency from (last) UPF to Application Server",
+                "value": "={{ $json.meta['Latency from (last) UPF to Application Server'] }}"
+              },
+              {
+                "name": "Supported device velocity",
+                "value": "={{ $json.meta['Supported device velocity'] }}"
+              },
+              {
+                "name": "V2X-PC5 Network Scheduled Mode",
+                "value": "={{ $json.meta['V2X-PC5 Network Scheduled Mode'] }}"
+              },
+              {
+                "name": "Positioning support: Accuracy",
+                "value": "={{ $json.meta['Positioning support: Accuracy'] }}"
+              },
+              {
+                "name": "Session and Service Continuity support",
+                "value": "={{ $json.meta['Session and Service Continuity support'] }}"
+              },
+              {
+                "name": "Positioning support: Availability",
+                "value": "={{ $json.meta['Positioning support: Availability'] }}"
+              },
+              {
+                "name": "Mission critical support",
+                "value": "={{ $json.meta['Mission critical support'] }}"
+              },
+              {
+                "name": "Mission critical support: Mission-critical capability support",
+                "value": "={{ $json.meta['Mission critical support: Mission-critical capability support'] }}"
+              },
+              {
+                "name": "Mission critical support: Mission-critical service support",
+                "value": "={{ $json.meta['Mission critical support: Mission-critical service support'] }}"
+              },
+              {
+                "name": "Group communication support",
+                "value": "={{ $json.meta['Group communication support'] }}"
+              },
+              {
+                "name": "Data network access: Data access per data network",
+                "value": "={{ $json.meta['Data network access: Data access per data network'] }}"
+              },
+              {
+                "name": "Synchronicity: Availability",
+                "value": "={{ $json.meta['Synchronicity: Availability'] }}"
+              },
+              {
+                "name": "Synchronicity: Accuracy",
+                "value": "={{ $json.meta['Synchronicity: Accuracy'] }}"
+              },
+              {
+                "name": "User management openness",
+                "value": "={{ $json.meta['User management openness'] }}"
+              },
+              {
+                "name": "Network Slice Specific Authentication and Authorization (NSSAA) Required",
+                "value": "={{ $json.meta['Network Slice Specific Authentication and Authorization (NSSAA) Required'] }}"
+              },
+              {
+                "name": "Data network access: Tunnelling mechanism",
+                "value": "={{ $json.meta['Data network access: Tunnelling mechanism'] }}"
+              },
+              {
+                "name": "Edge",
+                "value": "={{ $json.meta['Edge'] }}"
+              },
+              {
+                "name": "Price",
+                "value": "={{ $json.meta['Price'] }}"
+              },
+              {
+                "name": "unmapped_characteristics",
+                "value": "={{ $json.unmapped_characteristics }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        3696,
+        752
+      ],
+      "id": "00d13bba-873a-4d80-98df-e01a2a2f0723",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkSize": 4000,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        944
+      ],
+      "id": "317c6faa-5b64-43d0-ac67-db7becfa29b1",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "model": "qwen3-embedding:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        3472,
+        816
+      ],
+      "id": "acf14455-88b3-4cdf-a332-9160d9edc67a",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "3AAsVDxdPq5IhITp",
+          "name": "Ollama account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://openslice.example/auth/realms/openslice/protocol/openid-connect/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "password"
+            },
+            {
+              "name": "client_id",
+              "value": "osapiWebClientId"
+            },
+            {
+              "name": "username",
+              "value": "__OPENSLICE_USERNAME__"
+            },
+            {
+              "name": "password",
+              "value": "__OPENSLICE_PASSWORD__"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2368,
+        592
+      ],
+      "id": "3d707525-31c4-4d32-95c0-7745f1b679c4",
+      "name": "getTokenOpneSlice"
+    },
+    {
+      "parameters": {
+        "url": "http://openslice.example/tmf-api/serviceCatalogManagement/v4/serviceSpecification",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "1000"
+            },
+            {
+              "name": "offset",
+              "value": "0"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2640,
+        592
+      ],
+      "id": "10d62a9c-0839-4295-851c-8742feec9c77",
+      "name": "getServicesCatalogueOpenSlice"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== Paramètres =====\nconst START_DATE = '2026-10-01';    // CFS créés ou modifiés à partir de cette date (fuseau ci-dessous)\nconst TZ = 'Europe/Paris';\nconst EXCLUDE_NAME = /^test\\b/i;     // écarte les specs de test\n\nconst specs = [];\nfor (const it of $input.all()) {\n  const j = it.json;\n  if (Array.isArray(j)) specs.push(...j);\n  else if (Array.isArray(j.data)) specs.push(...j.data);\n  else specs.push(j);\n}\nconst localDate = iso => {\n  if (!iso) return null;\n  const d = new Date(iso);\n  return isNaN(d) ? null : d.toLocaleDateString('sv-SE', { timeZone: TZ });   // YYYY-MM-DD\n};\nconst isCFS = s => (s['@type'] || '').toLowerCase().includes('customerfacing');\n\n// CFS datés de START_DATE ou après (comparaison de chaînes YYYY-MM-DD)\nconst candidates = specs.filter(s => {\n  const d = localDate(s.lastUpdate);\n  return isCFS(s) && d !== null && d >= START_DATE && !EXCLUDE_NAME.test(s.name || '');\n});\n\n// Dédoublonnage par nom : la version la plus récente\nconst byName = new Map();\nfor (const s of candidates) {\n  const prev = byName.get(s.name);\n  if (!prev || new Date(s.lastUpdate) > new Date(prev.lastUpdate)) byName.set(s.name, s);\n}\nconst selected = [...byName.values()];\nif (selected.length === 0) {\n  throw new Error(`Aucun CFS daté du ${START_DATE} ou après, parmi ${specs.length} spécifications lues.`);\n}\n// La liste OpenSlice ne contient pas les caractéristiques : on ne transmet que l'id\nreturn selected.map(s => ({ json: { id: s.id, name: s.name, lastUpdate: s.lastUpdate } }));\n"
+      },
+      "name": "Filter aligned CFS (since start date)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        592
+      ],
+      "id": "a2873212-4ca9-43f2-9039-7c2e421c7b78"
+    },
+    {
+      "parameters": {
+        "operation": "deleteCollection",
+        "collectionName": {
+          "__rl": true,
+          "value": "Aligned_GST_Service_Catalog",
+          "mode": "name"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-qdrant.qdrant",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        592
+      ],
+      "id": "bad5fe97-7cb6-48e8-b93a-e04c9a8b58e0",
+      "name": "Delete Collection",
+      "alwaysOutputData": true,
+      "credentials": {
+        "qdrantRestApi": {
+          "id": "Le0YCjeyUXIid4OP",
+          "name": "Qdrant account 4"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "formTitle": "Synchronize Aligned GST Service Catalog",
+        "formDescription": "Index the GST-aligned CFS created or updated since the start date into the Qdrant collection Aligned_GST_Service_Catalog",
+        "formFields": {
+          "values": []
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        592
+      ],
+      "id": "ffbb23db-b59e-4fac-8ca0-c76f3c75b92f",
+      "name": "On form submission Aligned GST",
+      "webhookId": "39dd835a-5b92-442b-858f-d9eab42d90ec"
+    },
+    {
+      "parameters": {
+        "url": "=http://openslice.example/tmf-api/serviceCatalogManagement/v4/serviceSpecification/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('getTokenOpneSlice').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3040,
+        592
+      ],
+      "id": "e3674ced-0556-4333-998b-02e4ca7adf0a",
+      "name": "getServiceSpecById"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chaque item est une spec complète renvoyée par GET /serviceSpecification/{id}\n// Caractéristiques déclarées comme métadonnées dans le Default Data Loader (catalogue aligné GST)\nconst KNOWN = new Set([\"Availability\", \"Isolation level: Isolation\", \"Isolation level: Logical Isolation\", \"Area of Service\", \"Area of Service: Region specification\", \"Downlink throughput per network slice: Guaranteed downlink throughput quota\", \"Uplink throughput per network slice: Guaranteed uplink throughput quota\", \"Downlink maximum throughput per UE: Maximum downlink throughput per UE value\", \"Uplink maximum throughput per UE: Maximum Uplink Throughput per UE value\", \"Isolation level: Physical Isolation\", \"UE density\", \"Maximum number of UEs\", \"NB-IoT Support\", \"Delay tolerance\", \"Slice quality of service: 3GPP 5QI\", \"Slice quality of service: Packet Delay Budget\", \"Slice quality of service: Packet Error Rate\", \"Deterministic communication: Availability\", \"Deterministic communication: Periodicity\", \"Latency from (last) UPF to Application Server\", \"Supported device velocity\", \"V2X-PC5 Network Scheduled Mode\", \"Positioning support: Accuracy\", \"Session and Service Continuity support\", \"Positioning support: Availability\", \"Mission critical support\", \"Mission critical support: Mission-critical capability support\", \"Mission critical support: Mission-critical service support\", \"Group communication support\", \"Data network access: Data access per data network\", \"Synchronicity: Availability\", \"Synchronicity: Accuracy\", \"User management openness\", \"Network Slice Specific Authentication and Authorization (NSSAA) Required\", \"Data network access: Tunnelling mechanism\", \"Edge\", \"Price\"]);\n\nconst TIERS = ['Basic', 'Premium', 'Gold'];\nconst tierOf = name => TIERS.find(t => new RegExp(`\\\\b${t}$`, 'i').test(name || '')) || 'N/A';\nconst valOf = c => {\n  const vals = c.serviceSpecCharacteristicValue || [];\n  const v = vals.find(x => x.isDefault) || vals[0];\n  return v && v.value ? { value: v.value.value, alias: v.value.alias, unit: v.unitOfMeasure } : null;\n};\nconst SKIP = new Set(['SSPEC_GRAPH_NOTATION']);\n\nconst out = [];\nfor (const it of $input.all()) {\n  const s = it.json;\n  const meta = {};          // nom de caractéristique -> \"valeur unité (alias)\"\n  for (const c of (s.serviceSpecCharacteristic || [])) {\n    if (SKIP.has(c.name)) continue;\n    const v = valOf(c);\n    if (!v) continue;\n    const unit = v.unit && !['NA', 'N/A'].includes(v.unit) ? ` ${v.unit}` : '';\n    const alias = v.alias ? ` (${v.alias})` : '';\n    meta[c.name] = `${v.value}${unit}${alias}`;\n  }\n  // Conserver chaque CFS reçu, même sans Availability ou Isolation level: Isolation.\n  const unmapped = Object.keys(meta).filter(n => !KNOWN.has(n));\n  const rels = (s.serviceSpecRelationship || []).map(r => `- ${r.name} [${r.role || 'n/a'}]`);\n  const tier = tierOf(s.name);\n  // TMF633 : isBundle = true si la spec est un bundle (composée d'autres CFS)\n  const isBundle = s.isBundle === true || String(s.isBundle).toLowerCase() === 'true';\n  const text = [\n    `Service: ${s.name}`,\n    `spec_id: ${s.id}`,\n    `Type: CFS (orderable customer service)`,\n    `Tier: ${tier}`,\n    `isBundle: ${isBundle}`,\n    `Description: ${s.description || ''}`,\n    `Characteristics (GSMA GST NG.116):`,\n    ...Object.entries(meta).map(([n, v]) => `- ${n}: ${v}`),\n    ...(rels.length ? ['Realized by (RFS):', ...rels] : []),\n  ].join('\\n');\n\n  out.push({ json: {\n    text, spec_id: s.id, name: s.name, kind: 'CFS', tier, isBundle, lastUpdate: s.lastUpdate, meta,\n    // n'apparaît dans Qdrant que si une caractéristique inconnue doit être ajoutée au Data Loader\n    unmapped_characteristics: unmapped.length ? unmapped.join(', ') : undefined,\n  }});\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        592
+      ],
+      "id": "0700a644-2405-4e98-a0c0-06aafcf4b4f4",
+      "name": "Clean CFS (GST attributes)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "RAG Catalog (ingestion)",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "RAG Catalog (ingestion)",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getServicesCatalogueOpenSlice": {
+      "main": [
+        [
+          {
+            "node": "Filter aligned CFS (since start date)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getTokenOpneSlice": {
+      "main": [
+        [
+          {
+            "node": "getServicesCatalogueOpenSlice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Collection": {
+      "main": [
+        [
+          {
+            "node": "getTokenOpneSlice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission Aligned GST": {
+      "main": [
+        [
+          {
+            "node": "Delete Collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getServiceSpecById": {
+      "main": [
+        [
+          {
+            "node": "Clean CFS (GST attributes)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean CFS (GST attributes)": {
+      "main": [
+        [
+          {
+            "node": "RAG Catalog (ingestion)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter aligned CFS (since start date)": {
+      "main": [
+        [
+          {
+            "node": "getServiceSpecById",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e3a72bee-c451-4892-b7e9-db9dee58ba6c",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "pGNL6z95gC0huzLu",
+  "tags": []
+}

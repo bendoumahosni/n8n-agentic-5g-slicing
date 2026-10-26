@@ -1,0 +1,260 @@
+{
+  "name": "Creation_Generic_CFS_collection_Qdrant",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Ingestion Type de Service Générique (CFSS)",
+        "formDescription": "Sélectionnez un fichier JSON GST/TMF633 (CFSS) à indexer dans Qdrant.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Fichier CFSS (JSON)",
+              "fieldType": "file",
+              "acceptFileTypes": ".json",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f2582bde-f049-49f2-bbb5-a9239e7a683c",
+      "name": "1. Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        2336,
+        544
+      ],
+      "webhookId": "5c3d1c73-53b3-4763-8d31-2816b035b524"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupère le binaire du fichier uploadé via le Form Trigger\nconst item = $input.first();\nconst binaryKeys = Object.keys(item.binary || {});\nif (binaryKeys.length === 0) {\n  throw new Error('Aucun fichier binaire trouvé en entrée.');\n}\nconst binaryKey = binaryKeys[0];\nconst binaryData = item.binary[binaryKey];\n\n// Décodage du contenu JSON\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst jsonStr = buffer.toString('utf-8');\nlet spec;\ntry {\n  spec = JSON.parse(jsonStr);\n} catch (e) {\n  throw new Error('Le fichier fourni n\\'est pas un JSON valide: ' + e.message);\n}\n\nconst id = spec.id;\nconst name = spec.name;\nconst description = spec.description || '';\nconst chars = spec.serviceSpecCharacteristic || [];\n\n// Construction d'un digest compact (une ligne par caractéristique)\n// pour alimenter le LLM sans lui envoyer tout le JSON brut.\nfunction formatValue(v) {\n  const alias = (v.value && (v.value.alias || v.value.value)) || '';\n  const hasRange = v.valueFrom !== null && v.valueFrom !== undefined && v.valueTo !== null && v.valueTo !== undefined;\n  if (hasRange) {\n    const unit = (v.unitOfMeasure && v.unitOfMeasure !== 'N/A') ? v.unitOfMeasure : '';\n    return `${v.valueFrom}-${v.valueTo}${unit} (${alias})`.trim();\n  }\n  return `${alias}`.trim();\n}\n\nconst digestLines = chars.map((c) => {\n  const vals = (c.serviceSpecCharacteristicValue || []).map(formatValue).filter(Boolean).join(' | ');\n  const tags = (c.serviceSpecCharRelationship || [])\n    .filter((r) => r.relationshipType === 'tag')\n    .map((r) => r.name)\n    .join(',');\n  return `- ${c.name} [${c.valueType}]${tags ? ' {' + tags + '}' : ''}: ${vals}`;\n});\n\n// Limite de sécurité (évite un digest disproportionné pour des specs très longues)\nconst MAX_LINES = 400;\nconst digest = digestLines.slice(0, MAX_LINES).join('\\n');\n\nreturn [{\n  json: {\n    id,\n    name,\n    description,\n    nb_characteristics: chars.length,\n    digest\n  }\n}];"
+      },
+      "id": "20ac53e4-f945-4ed0-bac5-d8c526568b25",
+      "name": "2. Extraction & Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2576,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama.example:11434/api/chat",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"qwen3.5:4b\",\n  stream: false,\n  think: false,\n  options: { temperature: 0.2 },\n  messages: [\n    {\n      role: \"system\",\n      content: `Tu es un expert en réseaux 5G/6G et en spécifications GST (GSMA) / TMF633. À partir de la liste compacte de caractéristiques techniques d'un type de service générique, rédige un résumé concis et factuel en français (4 à 6 phrases), fondé strictement sur les caractéristiques fournies (digest).\n\nLe résumé doit décrire :\n1. La nature du service et ses cas d'usage typiques (à quoi il sert concrètement).\n2. Ce qu'il garantit, en t'appuyant sur les valeurs numériques du digest telles quelles (latence, débit, disponibilité, densité de connexions, isolation, etc. — uniquement celles présentes dans le digest).\n3. Le profil de trafic induit par ces valeurs (par exemple si les chiffres traduisent un usage massif de faible débit, une exigence de latence critique, ou un débit élevé) — sans jamais nommer ou comparer à un autre type de service générique.\n\nNe mentionne aucun autre nom de service ou type générique (eMBB, URLLC, mMTC ne doivent apparaître que si le digest lui-même les mentionne explicitement pour CE service). N'invente aucune caractéristique absente du digest. Ne liste pas les attributs un par un, synthétise. Réponds uniquement avec le texte du résumé, sans préambule, sans balises de réflexion.`\n    },\n    {\n      role: \"user\",\n      content: `Nom du service: ${$json.name}\\nDescription: ${$json.description}\\n\\nCaractéristiques (digest):\\n${$json.digest}`\n    }\n  ]\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e616d271-e84f-4c27-a1ba-1808327d4c00",
+      "name": "3. LLM Résumé (Ollama local)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const llmResponse = $input.first().json;\n// Format Ollama /api/chat: { message: { role, content }, done: true, ... }\nlet resume = (llmResponse.message && llmResponse.message.content) ? llmResponse.message.content.trim() : '';\n\n// Sécurité: certains modèles \"thinking\" (ex: qwen) peuvent renvoyer des balises <think>...</think>\n// avant la réponse finale. On les retire si présentes.\nresume = resume.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n\nif (!resume) {\n  throw new Error('Le LLM local n\\'a retourné aucun résumé exploitable. Réponse brute: ' + JSON.stringify(llmResponse));\n}\n\nconst prev = $('2. Extraction & Digest').first().json;\n\nreturn [{\n  json: {\n    id: prev.id,\n    name: prev.name,\n    description: prev.description,\n    nb_characteristics: prev.nb_characteristics,\n    resume\n  }\n}];"
+      },
+      "id": "718db840-04f3-4230-93d1-45617b35480b",
+      "name": "3b. Extraire Résumé",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3056,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama.example:11434/api/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"qwen3-embedding:latest\",\n  prompt: `${$json.name}. ${$json.description}. ${$json.resume}`\n}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a3813eb8-745e-402e-b119-17f8e6db913f",
+      "name": "4. Embedding (Ollama local)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3296,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const embResponse = $input.first().json;\n// Format Ollama /api/embeddings: { embedding: [ ... ] }\nconst vector = embResponse.embedding || null;\nif (!vector || !Array.isArray(vector)) {\n  throw new Error('Embedding non retourné par Ollama. Réponse brute: ' + JSON.stringify(embResponse));\n}\n\nconst prev = $('3b. Extraire Résumé').first().json;\n\n// Qdrant accepte un id entier non signé ou un UUID.\n// Si l'id source n'est pas un entier valide, on génère un id numérique dérivé (hash).\nlet pointId = Number(prev.id);\nif (!Number.isInteger(pointId) || pointId < 0) {\n  let hash = 0;\n  const str = String(prev.id);\n  for (let i = 0; i < str.length; i++) {\n    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;\n  }\n  pointId = hash;\n}\n\n// Format attendu par le nœud Qdrant de n8n (LangChain) : { pageContent, metadata }.\n// Un payload \"à plat\" (name, description... à la racine) est renvoyé VIDE par n8n\n// ({\"pageContent\":\"\",\"metadata\":{}}), d'où l'échec du Grounding sur ces services.\n// pageContent reprend le texte embeddé ; metadata porte id/name lus par le pipeline.\nconst pageContent = [`${prev.name}: ${prev.description || ''}`.trim(), prev.resume || '']\n  .filter(Boolean).join(' ').trim();\n\nconst point = {\n  id: pointId,\n  vector: vector,\n  payload: {\n    pageContent,\n    metadata: {\n      id: String(prev.id),\n      name: prev.name,\n      description: prev.description,\n      resume: prev.resume,\n      nb_characteristics: prev.nb_characteristics\n    }\n  }\n};\n\nreturn [{ json: { points: [point] } }];\n"
+      },
+      "id": "e1e5f017-3cd9-47cb-9ffe-b148b7ee289f",
+      "name": "5. Construction Payload Qdrant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3536,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vérifie si la collection existe dans Qdrant, la crée sinon (taille de vecteur déduite dynamiquement).\nconst qdrantBase = 'http://qdrant.example:6333';\nconst collection = 'generics_CFSS';\n\nconst payload = $input.first().json;\nconst vectorSize = payload.points[0].vector.length;\n\nlet exists = true;\ntry {\n  await this.helpers.httpRequest({\n    method: 'GET',\n    url: `${qdrantBase}/collections/${collection}`,\n    json: true\n  });\n} catch (e) {\n  exists = false;\n}\n\nif (!exists) {\n  await this.helpers.httpRequest({\n    method: 'PUT',\n    url: `${qdrantBase}/collections/${collection}`,\n    json: true,\n    body: {\n      vectors: {\n        size: vectorSize,\n        distance: 'Cosine'\n      }\n    }\n  });\n}\n\nreturn [{ json: payload }];"
+      },
+      "id": "00507674-6dd1-4b8c-b18d-7ac9cc2a269e",
+      "name": "5b. Vérifier/Créer Collection Qdrant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3744,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant.example:6333/collections/generics_CFSS/points?wait=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "10bfb10b-4e6e-44e5-95c5-1ff425b5fa57",
+      "name": "6. Upsert Qdrant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3856,
+        368
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "1. Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "2. Extraction & Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Extraction & Digest": {
+      "main": [
+        [
+          {
+            "node": "3. LLM Résumé (Ollama local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. LLM Résumé (Ollama local)": {
+      "main": [
+        [
+          {
+            "node": "3b. Extraire Résumé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Extraire Résumé": {
+      "main": [
+        [
+          {
+            "node": "4. Embedding (Ollama local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Embedding (Ollama local)": {
+      "main": [
+        [
+          {
+            "node": "5. Construction Payload Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Construction Payload Qdrant": {
+      "main": [
+        [
+          {
+            "node": "5b. Vérifier/Créer Collection Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Vérifier/Créer Collection Qdrant": {
+      "main": [
+        [
+          {
+            "node": "6. Upsert Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7a95a307-396e-41bf-88a2-c361c984a743",
+  "meta": {},
+  "nodeGroups": [],
+  "id": "gFPFy6acS9uXB4Wc",
+  "tags": []
+}
